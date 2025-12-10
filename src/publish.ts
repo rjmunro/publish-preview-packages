@@ -110,20 +110,20 @@ async function publishPackage(
 		await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8')
 	} catch (error) {
 		const err = error as Error
-		
+
 		// Check if this is a "version already exists" error (409 Conflict)
 		if (err.message?.includes('409') || err.message?.includes('E409') || err.message?.includes('Cannot publish over existing version')) {
 			core.info(`  ℹ️  Version ${version} already published, adding tag only`)
-			
+
 			// Restore original version first
 			packageJson.version = originalVersion
 			await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8')
-			
+
 			// Add the dist-tag to the existing version
 			await addDistTag(packageName, version, tag, registry, token)
 			return
 		}
-		
+
 		// Try to restore original version on error
 		try {
 			const originalJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
