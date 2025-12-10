@@ -4,7 +4,6 @@
   "description": "GitHub Action to publish branch preview packages with content-based versioning",
   "main": "dist/index.js",
   "types": "lib/index.d.ts",
-  "type": "module",
   "scripts": {
     "build:types": "tsc",
     "build": "yarn build:types && ncc build lib/index.js -o dist --source-map --license licenses.txt",
