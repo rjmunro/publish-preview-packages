@@ -309,6 +309,7 @@ async function ensurePackageScope(pkgPath, scope) {
     }
     return {
         name: pkgJson.name,
+        originalName: originalName,
         version: pkgJson.version,
     };
 }
@@ -328,6 +329,7 @@ async function discoverPackages(packagesInput, repositoryOwner) {
                 const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner);
                 packages.push({
                     name: pkgInfo.name,
+                    originalName: pkgInfo.originalName,
                     path: pkgPath,
                     version: pkgInfo.version,
                 });
@@ -359,6 +361,7 @@ async function discoverPackages(packagesInput, repositoryOwner) {
             const pkgInfo = await ensurePackageScope('.', repositoryOwner);
             packages.push({
                 name: pkgInfo.name,
+                originalName: pkgInfo.originalName,
                 path: '.',
                 version: pkgInfo.version,
             });
@@ -388,6 +391,7 @@ async function discoverPackages(packagesInput, repositoryOwner) {
                 const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner);
                 packages.push({
                     name: pkgInfo.name,
+                    originalName: pkgInfo.originalName,
                     path: pkgPath,
                     version: pkgInfo.version,
                 });
@@ -688,6 +692,7 @@ async function publishPackages(versions, registry, token) {
         }
         published.push({
             name: pkg.name,
+            originalName: pkg.originalName,
             version: pkg.previewVersion,
             tag: pkg.branchTag,
         });
@@ -768,6 +773,7 @@ async function computeVersions(packages, branchName) {
         const branchTag = `branch-${sanitizedBranch}`;
         results.push({
             name: pkg.name,
+            originalName: pkg.originalName,
             path: pkg.path,
             currentVersion: pkg.version,
             previewVersion,

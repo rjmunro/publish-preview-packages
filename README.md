@@ -197,10 +197,24 @@ You can use the output to comment on pull requests:
       const body = `## 📦 Preview Packages Published
 
 ${packages.map(pkg => 
-  `- **${pkg.name}**@\`${pkg.version}\`\n  \`\`\`bash\n  yarn add ${pkg.name}@${pkg.tag}\n  \`\`\``
+  `- **${pkg.name}**@\`${pkg.version}\`
+  \`\`\`bash
+  # Configure npm to use GitHub Packages
+  echo "@your-org:registry=https://npm.pkg.github.com" >> .npmrc
+  
+  # Install this preview version
+  yarn add ${pkg.name}@${pkg.tag}
+  \`\`\`
+  
+  To use this preview via resolutions:
+  \`\`\`json
+  "resolutions": {
+    "${pkg.originalName}": "${pkg.name}@${pkg.version}"
+  }
+  \`\`\``
 ).join('\n\n')}
 
-*Preview packages are available on GitHub Packages. Configure your \`.npmrc\` to use them.*`;
+*Preview packages are automatically published for every branch.*`;
 
       github.rest.issues.createComment({
         issue_number: context.issue.number,
@@ -216,7 +230,18 @@ This will post a comment like:
 >
 > - **@org/shared-lib**@`1.0.0-preview.abc123`
 >   ```bash
+>   # Configure npm to use GitHub Packages
+>   echo "@org:registry=https://npm.pkg.github.com" >> .npmrc
+>   
+>   # Install this preview version
 >   yarn add @org/shared-lib@branch-feature-name
+>   ```
+>   
+>   To use this preview via resolutions:
+>   ```json
+>   "resolutions": {
+>     "shared-lib": "@org/shared-lib@1.0.0-preview.abc123"
+>   }
 >   ```
 >
 > *Preview packages are available on GitHub Packages. Configure your `.npmrc` to use them.*

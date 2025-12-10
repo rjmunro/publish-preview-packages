@@ -10,6 +10,7 @@ import type { PackageInfo } from './discover'
 
 export interface VersionInfo {
 	name: string
+	originalName: string
 	path: string
 	currentVersion: string
 	previewVersion: string
@@ -87,6 +88,7 @@ export async function computeVersions(
 
 		results.push({
 			name: pkg.name,
+			originalName: pkg.originalName,
 			path: pkg.path,
 			currentVersion: pkg.version,
 			previewVersion,

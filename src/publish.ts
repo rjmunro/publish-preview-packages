@@ -11,6 +11,7 @@ import type { VersionInfo } from './versions'
 
 export interface PublishedPackage {
 	name: string
+	originalName: string
 	version: string
 	tag: string
 }
@@ -145,6 +146,7 @@ export async function publishPackages(
 
 		published.push({
 			name: pkg.name,
+			originalName: pkg.originalName,
 			version: pkg.previewVersion,
 			tag: pkg.branchTag,
 		})

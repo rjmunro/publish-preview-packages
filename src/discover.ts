@@ -8,6 +8,7 @@ import { join } from 'path'
 
 export interface PackageInfo {
 	name: string
+	originalName: string
 	path: string
 	version: string
 }
@@ -27,7 +28,7 @@ function applyScopeToPackage(packageName: string, scope: string): string {
 /**
  * Update package.json to use repository owner's scope
  */
-async function ensurePackageScope(pkgPath: string, scope: string): Promise<{ name: string; version: string }> {
+async function ensurePackageScope(pkgPath: string, scope: string): Promise<{ name: string; originalName: string; version: string }> {
 	const pkgJsonPath = join(pkgPath, 'package.json')
 	const pkgJson = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
 
@@ -41,6 +42,7 @@ async function ensurePackageScope(pkgPath: string, scope: string): Promise<{ nam
 
 	return {
 		name: pkgJson.name,
+		originalName: originalName,
 		version: pkgJson.version,
 	}
 }
@@ -66,6 +68,7 @@ export async function discoverPackages(
 				const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner)
 				packages.push({
 					name: pkgInfo.name,
+					originalName: pkgInfo.originalName,
 					path: pkgPath,
 					version: pkgInfo.version,
 				})
@@ -99,6 +102,7 @@ export async function discoverPackages(
 			const pkgInfo = await ensurePackageScope('.', repositoryOwner)
 			packages.push({
 				name: pkgInfo.name,
+				originalName: pkgInfo.originalName,
 				path: '.',
 				version: pkgInfo.version,
 			})
@@ -131,6 +135,7 @@ export async function discoverPackages(
 				const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner)
 				packages.push({
 					name: pkgInfo.name,
+					originalName: pkgInfo.originalName,
 					path: pkgPath,
 					version: pkgInfo.version,
 				})
