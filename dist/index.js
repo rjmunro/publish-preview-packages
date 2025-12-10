@@ -644,9 +644,9 @@ async function publishPackage(packageDir, version, tag, registry, token) {
     const packageJsonPath = path.join(packageDir, 'package.json');
     const packageJson = JSON.parse(await (0, promises_1.readFile)(packageJsonPath, 'utf8'));
     const packageName = packageJson.name;
+    const originalVersion = packageJson.version;
     try {
         // Set version in package.json temporarily
-        const originalVersion = packageJson.version;
         packageJson.version = version;
         await (0, promises_1.writeFile)(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
         // Publish with tag
@@ -663,6 +663,17 @@ async function publishPackage(packageDir, version, tag, registry, token) {
         await (0, promises_1.writeFile)(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
     }
     catch (error) {
+        const err = error;
+        // Check if this is a "version already exists" error (409 Conflict)
+        if (err.message?.includes('409') || err.message?.includes('E409') || err.message?.includes('Cannot publish over existing version')) {
+            core.info(`  ℹ️  Version ${version} already published, adding tag only`);
+            // Restore original version first
+            packageJson.version = originalVersion;
+            await (0, promises_1.writeFile)(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+            // Add the dist-tag to the existing version
+            await addDistTag(packageName, version, tag, registry, token);
+            return;
+        }
         // Try to restore original version on error
         try {
             const originalJson = JSON.parse(await (0, promises_1.readFile)(packageJsonPath, 'utf8'));
@@ -671,7 +682,7 @@ async function publishPackage(packageDir, version, tag, registry, token) {
         catch (restoreError) {
             core.warning(`Failed to restore package.json: ${restoreError.message}`);
         }
-        throw new Error(`Failed to publish ${packageName}@${version}: ${error.message}`);
+        throw new Error(`Failed to publish ${packageName}@${version}: ${err.message}`);
     }
 }
 /**
