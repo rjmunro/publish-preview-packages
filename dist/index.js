@@ -49,10 +49,8 @@ const exec = __importStar(__nccwpck_require__(5236));
 /**
  * Build packages
  */
-async function buildPackages(packagesDir, buildCommand) {
-    await exec.exec(buildCommand, [], {
-        cwd: packagesDir,
-    });
+async function buildPackages(buildCommand) {
+    await exec.exec(buildCommand);
 }
 //# sourceMappingURL=build.js.map
 
@@ -317,13 +315,15 @@ async function ensurePackageScope(pkgPath, scope) {
 /**
  * Discover packages to publish
  */
-async function discoverPackages(packagesDir, packageList, repositoryOwner) {
+async function discoverPackages(packagesInput, repositoryOwner) {
     const packages = [];
-    // If specific packages are listed, use those
-    if (packageList) {
-        const names = packageList.split(',').map((s) => s.trim());
-        for (const name of names) {
-            const pkgPath = (0, path_1.join)(packagesDir, name);
+    // Explicit package paths provided
+    if (packagesInput) {
+        const paths = packagesInput
+            .split('\n')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        for (const pkgPath of paths) {
             try {
                 const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner);
                 packages.push({
@@ -333,12 +333,43 @@ async function discoverPackages(packagesDir, packageList, repositoryOwner) {
                 });
             }
             catch (error) {
-                throw new Error(`Failed to read package.json for ${name}: ${error.message}`);
+                throw new Error(`Failed to read package.json at ${pkgPath}: ${error.message}`);
             }
         }
         return packages;
     }
-    // Auto-discover from packages directory
+    // Auto-discover: Check if root is a package
+    const rootPkgJsonPath = 'package.json';
+    let isRootPackage = false;
+    try {
+        const stats = await (0, promises_1.stat)(rootPkgJsonPath);
+        isRootPackage = stats.isFile();
+    }
+    catch {
+        // Not a root package, will search packages/ directory
+    }
+    // If root is a package, publish it directly
+    if (isRootPackage) {
+        try {
+            const pkgJson = JSON.parse(await (0, promises_1.readFile)(rootPkgJsonPath, 'utf8'));
+            // Skip if private
+            if (pkgJson.private) {
+                throw new Error('Root package is marked as private and cannot be published');
+            }
+            const pkgInfo = await ensurePackageScope('.', repositoryOwner);
+            packages.push({
+                name: pkgInfo.name,
+                path: '.',
+                version: pkgInfo.version,
+            });
+            return packages;
+        }
+        catch (error) {
+            throw new Error(`Failed to read root package.json: ${error.message}`);
+        }
+    }
+    // Auto-discover from packages/ directory
+    const packagesDir = 'packages';
     try {
         const entries = await (0, promises_1.readdir)(packagesDir, { withFileTypes: true });
         for (const entry of entries) {
@@ -368,10 +399,10 @@ async function discoverPackages(packagesDir, packageList, repositoryOwner) {
         }
     }
     catch (error) {
-        throw new Error(`Failed to discover packages in ${packagesDir}: ${error.message}`);
+        throw new Error(`Failed to discover packages in packages/: ${error.message}`);
     }
     if (packages.length === 0) {
-        throw new Error(`No packages found in ${packagesDir}`);
+        throw new Error('No packages found in packages/ directory');
     }
     return packages;
 }
@@ -435,9 +466,8 @@ async function run() {
         const inputs = {
             registry: core.getInput('registry') || 'https://npm.pkg.github.com',
             registryToken: core.getInput('registry-token', { required: true }),
-            packagesDir: core.getInput('packages-dir') || 'packages',
+            packages: core.getInput('packages') || '',
             buildCommand: core.getInput('build-command') || 'yarn build',
-            packageList: core.getInput('package-list') || '',
             maxVersions: parseInt(core.getInput('max-versions') || '150'),
             minAgeDays: parseInt(core.getInput('min-age-days') || '30'),
             skipBuild: core.getInput('skip-build') === 'true',
@@ -446,10 +476,9 @@ async function run() {
         const repository = github.context.repo;
         core.info(`📦 Publishing preview packages for branch: ${branchName}`);
         core.info(`Registry: ${inputs.registry}`);
-        core.info(`Packages directory: ${inputs.packagesDir}`);
         // Step 1: Discover packages
         core.startGroup('🔍 Discovering packages');
-        const packages = await (0, discover_1.discoverPackages)(inputs.packagesDir, inputs.packageList, repository.owner);
+        const packages = await (0, discover_1.discoverPackages)(inputs.packages, repository.owner);
         core.info(`Found ${packages.length} packages to process`);
         for (const pkg of packages) {
             core.info(`  - ${pkg.name} (${pkg.path})`);
@@ -458,7 +487,7 @@ async function run() {
         // Step 2: Build packages (if not skipped)
         if (!inputs.skipBuild) {
             core.startGroup('🔨 Building packages');
-            await (0, build_1.buildPackages)(inputs.packagesDir, inputs.buildCommand);
+            await (0, build_1.buildPackages)(inputs.buildCommand);
             core.endGroup();
         }
         else {

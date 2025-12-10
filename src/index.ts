@@ -14,9 +14,8 @@ import { publishPackages } from './publish'
 interface Inputs {
 	registry: string
 	registryToken: string
-	packagesDir: string
+	packages: string
 	buildCommand: string
-	packageList: string
 	maxVersions: number
 	minAgeDays: number
 	skipBuild: boolean
@@ -28,9 +27,8 @@ async function run(): Promise<void> {
 		const inputs: Inputs = {
 			registry: core.getInput('registry') || 'https://npm.pkg.github.com',
 			registryToken: core.getInput('registry-token', { required: true }),
-			packagesDir: core.getInput('packages-dir') || 'packages',
+			packages: core.getInput('packages') || '',
 			buildCommand: core.getInput('build-command') || 'yarn build',
-			packageList: core.getInput('package-list') || '',
 			maxVersions: parseInt(core.getInput('max-versions') || '150'),
 			minAgeDays: parseInt(core.getInput('min-age-days') || '30'),
 			skipBuild: core.getInput('skip-build') === 'true',
@@ -41,11 +39,10 @@ async function run(): Promise<void> {
 
 		core.info(`📦 Publishing preview packages for branch: ${branchName}`)
 		core.info(`Registry: ${inputs.registry}`)
-		core.info(`Packages directory: ${inputs.packagesDir}`)
 
 		// Step 1: Discover packages
 		core.startGroup('🔍 Discovering packages')
-		const packages = await discoverPackages(inputs.packagesDir, inputs.packageList, repository.owner)
+		const packages = await discoverPackages(inputs.packages, repository.owner)
 		core.info(`Found ${packages.length} packages to process`)
 		for (const pkg of packages) {
 			core.info(`  - ${pkg.name} (${pkg.path})`)
@@ -55,7 +52,7 @@ async function run(): Promise<void> {
 		// Step 2: Build packages (if not skipped)
 		if (!inputs.skipBuild) {
 			core.startGroup('🔨 Building packages')
-			await buildPackages(inputs.packagesDir, inputs.buildCommand)
+			await buildPackages(inputs.buildCommand)
 			core.endGroup()
 		} else {
 			core.info('⏭️  Skipping build (skip-build=true)')

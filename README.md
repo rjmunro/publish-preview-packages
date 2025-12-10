@@ -59,14 +59,15 @@ jobs:
     # Registry authentication token
     registry-token: ${{ secrets.GITHUB_TOKEN }}
     
-    # Packages directory (default: packages)
-    packages-dir: 'packages'
+    # Specific packages to publish (one per line, relative to repo root)
+    # If empty, auto-detects root package or packages/ directory
+    packages: |
+      packages/shared-lib
+      packages/blueprints-integration
+      packages/corelib
     
     # Build command (default: yarn build)
     build-command: 'yarn build'
-    
-    # Specific packages to publish (default: auto-detect)
-    package-list: 'shared-lib,blueprints-integration,corelib'
     
     # Maximum versions per package (default: 150)
     max-versions: '100'
@@ -76,6 +77,39 @@ jobs:
     
     # Skip build if already built (default: false)
     skip-build: 'false'
+```
+
+### Publishing Root Package
+
+To publish a single package from the repository root (non-monorepo):
+
+```yaml
+- uses: rjmunro/publish-preview-packages@v1
+  with:
+    registry-token: ${{ secrets.GITHUB_TOKEN }}
+    packages: '.'
+```
+
+Or omit `packages` entirely - the action will auto-detect if the root has a `package.json`:
+
+```yaml
+- uses: rjmunro/publish-preview-packages@v1
+  with:
+    registry-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Mixed Monorepo + Root
+
+You can publish multiple packages at different paths:
+
+```yaml
+- uses: rjmunro/publish-preview-packages@v1
+  with:
+    registry-token: ${{ secrets.GITHUB_TOKEN }}
+    packages: |
+      .
+      packages/shared-lib
+      apps/worker
 ```
 
 ## How It Works

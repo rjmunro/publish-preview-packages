@@ -49,18 +49,19 @@ async function ensurePackageScope(pkgPath: string, scope: string): Promise<{ nam
  * Discover packages to publish
  */
 export async function discoverPackages(
-	packagesDir: string,
-	packageList: string,
+	packagesInput: string,
 	repositoryOwner: string
 ): Promise<PackageInfo[]> {
 	const packages: PackageInfo[] = []
 
-	// If specific packages are listed, use those
-	if (packageList) {
-		const names = packageList.split(',').map((s) => s.trim())
-		for (const name of names) {
-			const pkgPath = join(packagesDir, name)
+	// Explicit package paths provided
+	if (packagesInput) {
+		const paths = packagesInput
+			.split('\n')
+			.map((s) => s.trim())
+			.filter((s) => s.length > 0)
 
+		for (const pkgPath of paths) {
 			try {
 				const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner)
 				packages.push({
@@ -69,13 +70,46 @@ export async function discoverPackages(
 					version: pkgInfo.version,
 				})
 			} catch (error) {
-				throw new Error(`Failed to read package.json for ${name}: ${(error as Error).message}`)
+				throw new Error(`Failed to read package.json at ${pkgPath}: ${(error as Error).message}`)
 			}
 		}
 		return packages
 	}
 
-	// Auto-discover from packages directory
+	// Auto-discover: Check if root is a package
+	const rootPkgJsonPath = 'package.json'
+	let isRootPackage = false
+	try {
+		const stats = await stat(rootPkgJsonPath)
+		isRootPackage = stats.isFile()
+	} catch {
+		// Not a root package, will search packages/ directory
+	}
+
+	// If root is a package, publish it directly
+	if (isRootPackage) {
+		try {
+			const pkgJson = JSON.parse(await readFile(rootPkgJsonPath, 'utf8'))
+
+			// Skip if private
+			if (pkgJson.private) {
+				throw new Error('Root package is marked as private and cannot be published')
+			}
+
+			const pkgInfo = await ensurePackageScope('.', repositoryOwner)
+			packages.push({
+				name: pkgInfo.name,
+				path: '.',
+				version: pkgInfo.version,
+			})
+			return packages
+		} catch (error) {
+			throw new Error(`Failed to read root package.json: ${(error as Error).message}`)
+		}
+	}
+
+	// Auto-discover from packages/ directory
+	const packagesDir = 'packages'
 	try {
 		const entries = await readdir(packagesDir, { withFileTypes: true })
 
@@ -106,11 +140,11 @@ export async function discoverPackages(
 			}
 		}
 	} catch (error) {
-		throw new Error(`Failed to discover packages in ${packagesDir}: ${(error as Error).message}`)
+		throw new Error(`Failed to discover packages in packages/: ${(error as Error).message}`)
 	}
 
 	if (packages.length === 0) {
-		throw new Error(`No packages found in ${packagesDir}`)
+		throw new Error('No packages found in packages/ directory')
 	}
 
 	return packages
