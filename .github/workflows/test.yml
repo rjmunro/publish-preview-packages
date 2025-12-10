@@ -27,6 +27,16 @@ jobs:
       - name: Build action
         run: yarn build
 
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code dist/; then
+            echo "❌ Error: dist/ has uncommitted changes after build"
+            echo "Please run 'yarn build' and commit the changes"
+            git diff dist/
+            exit 1
+          fi
+          echo "✓ dist/ is up to date"
+
       - name: Test the action by publishing itself
         uses: ./
         id: publish
