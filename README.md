@@ -138,12 +138,54 @@ Output format:
   {
     "name": "@org/shared-lib",
     "version": "1.0.0-preview.abc123",
-    "branchTag": "branch-feature-name",
-    "contentHash": "abc123",
-    "isNew": true
+    "tag": "branch-feature-name"
   }
 ]
 ```
+
+### Posting Results to PR Comments
+
+You can use the output to comment on pull requests:
+
+```yaml
+- uses: rjmunro/publish-preview-packages@v1
+  id: publish
+  with:
+    registry-token: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Comment on PR
+  if: github.event_name == 'pull_request'
+  uses: actions/github-script@v7
+  with:
+    script: |
+      const packages = JSON.parse('${{ steps.publish.outputs.published-packages }}');
+      
+      const body = `## 📦 Preview Packages Published
+
+${packages.map(pkg => 
+  `- **${pkg.name}**@\`${pkg.version}\`\n  \`\`\`bash\n  yarn add ${pkg.name}@${pkg.tag}\n  \`\`\``
+).join('\n\n')}
+
+*Preview packages are available on GitHub Packages. Configure your \`.npmrc\` to use them.*`;
+
+      github.rest.issues.createComment({
+        issue_number: context.issue.number,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        body: body
+      });
+```
+
+This will post a comment like:
+
+> ## 📦 Preview Packages Published
+>
+> - **@org/shared-lib**@`1.0.0-preview.abc123`
+>   ```bash
+>   yarn add @org/shared-lib@branch-feature-name
+>   ```
+>
+> *Preview packages are available on GitHub Packages. Configure your `.npmrc` to use them.*
 
 ## Requirements
 
