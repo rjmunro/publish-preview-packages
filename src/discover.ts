@@ -1,14 +1,20 @@
 import { readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
 
+export interface PackageInfo {
+	name: string
+	path: string
+	version: string
+}
+
 /**
  * Discover packages to publish
- * @param {string} packagesDir - Directory containing packages
- * @param {string} packageList - Comma-separated list of package names (optional)
- * @returns {Promise<Array<{name: string, path: string, version: string}>>}
  */
-export async function discoverPackages(packagesDir, packageList) {
-	const packages = []
+export async function discoverPackages(
+	packagesDir: string,
+	packageList: string
+): Promise<PackageInfo[]> {
+	const packages: PackageInfo[] = []
 
 	// If specific packages are listed, use those
 	if (packageList) {
@@ -25,7 +31,7 @@ export async function discoverPackages(packagesDir, packageList) {
 					version: pkgJson.version,
 				})
 			} catch (error) {
-				throw new Error(`Failed to read package.json for ${name}: ${error.message}`)
+				throw new Error(`Failed to read package.json for ${name}: ${(error as Error).message}`)
 			}
 		}
 		return packages
@@ -61,7 +67,7 @@ export async function discoverPackages(packagesDir, packageList) {
 			}
 		}
 	} catch (error) {
-		throw new Error(`Failed to discover packages in ${packagesDir}: ${error.message}`)
+		throw new Error(`Failed to discover packages in ${packagesDir}: ${(error as Error).message}`)
 	}
 
 	if (packages.length === 0) {

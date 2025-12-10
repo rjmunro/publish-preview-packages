@@ -1,14 +1,27 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import * as exec from '@actions/exec'
+import type { VersionInfo } from './versions'
+
+interface Repository {
+	owner: string
+	repo: string
+}
+
+interface PreviewVersion {
+	version: string
+	tags: string[]
+	publishedAt: Date
+}
+
+interface DeletionCandidate extends PreviewVersion {
+	ageDays: number
+}
 
 /**
  * Get all branches from repository
- * @param {{owner: string, repo: string}} repository
- * @param {string} token
- * @returns {Promise<Set<string>>}
  */
-async function getAllBranches(repository, token) {
+async function getAllBranches(repository: Repository, token: string): Promise<Set<string>> {
 	const octokit = github.getOctokit(token)
 
 	try {
@@ -20,19 +33,19 @@ async function getAllBranches(repository, token) {
 
 		return new Set(branches.map((b) => b.name))
 	} catch (error) {
-		core.warning(`Failed to fetch branches: ${error.message}`)
+		core.warning(`Failed to fetch branches: ${(error as Error).message}`)
 		return new Set()
 	}
 }
 
 /**
  * Get all preview versions for a package
- * @param {string} packageName
- * @param {string} registry
- * @param {string} token
- * @returns {Promise<Array<{version: string, tags: Array<string>, publishedAt: Date}>>}
  */
-async function getPreviewVersions(packageName, registry, token) {
+async function getPreviewVersions(
+	packageName: string,
+	registry: string,
+	token: string
+): Promise<PreviewVersion[]> {
 	let output = ''
 
 	try {
@@ -48,12 +61,16 @@ async function getPreviewVersions(packageName, registry, token) {
 				},
 				env: {
 					...process.env,
-					NPM_CONFIG_//npm.pkg.github.com/:_authToken: token,
+					'NPM_CONFIG_//npm.pkg.github.com/:_authToken': token,
 				},
 			}
 		)
 
-		const data = JSON.parse(output)
+		const data = JSON.parse(output) as {
+			versions?: string | string[]
+			time?: Record<string, string>
+			'dist-tags'?: Record<string, string>
+		}
 
 		// Handle both single version and multiple versions response
 		const versions = Array.isArray(data.versions) ? data.versions : data.versions ? [data.versions] : []
@@ -61,7 +78,7 @@ async function getPreviewVersions(packageName, registry, token) {
 		const distTags = data['dist-tags'] || {}
 
 		// Build map of version -> tags
-		const versionTags = {}
+		const versionTags: Record<string, string[]> = {}
 		for (const [tag, version] of Object.entries(distTags)) {
 			if (!versionTags[version]) {
 				versionTags[version] = []
@@ -70,30 +87,32 @@ async function getPreviewVersions(packageName, registry, token) {
 		}
 
 		return versions
-			.filter((v) => v.includes('-preview.'))
-			.map((v) => ({
+			.filter((v: string) => v.includes('-preview.'))
+			.map((v: string) => ({
 				version: v,
 				tags: versionTags[v] || [],
 				publishedAt: time[v] ? new Date(time[v]) : new Date(),
 			}))
 	} catch (error) {
 		// Package might not exist yet
-		if (error.message?.includes('404') || error.message?.includes('E404')) {
+		const err = error as Error
+		if (err.message?.includes('404') || err.message?.includes('E404')) {
 			return []
 		}
-		core.warning(`Failed to get versions for ${packageName}: ${error.message}`)
+		core.warning(`Failed to get versions for ${packageName}: ${err.message}`)
 		return []
 	}
 }
 
 /**
  * Delete a package version from GitHub Packages
- * @param {string} packageName
- * @param {string} version
- * @param {string} owner
- * @param {string} token
  */
-async function deleteVersion(packageName, version, owner, token) {
+async function deleteVersion(
+	packageName: string,
+	version: string,
+	owner: string,
+	token: string
+): Promise<void> {
 	const octokit = github.getOctokit(token)
 	const packageNameWithoutScope = packageName.split('/').pop()
 
@@ -101,7 +120,7 @@ async function deleteVersion(packageName, version, owner, token) {
 		// Get all versions to find the ID
 		const { data: versions } = await octokit.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
 			package_type: 'npm',
-			package_name: packageNameWithoutScope,
+			package_name: packageNameWithoutScope!,
 			org: owner,
 		})
 
@@ -113,24 +132,21 @@ async function deleteVersion(packageName, version, owner, token) {
 
 		await octokit.rest.packages.deletePackageVersionForOrg({
 			package_type: 'npm',
-			package_name: packageNameWithoutScope,
+			package_name: packageNameWithoutScope!,
 			org: owner,
 			package_version_id: versionData.id,
 		})
 
 		core.info(`  🗑️  Deleted ${packageName}@${version}`)
 	} catch (error) {
-		core.warning(`Failed to delete ${packageName}@${version}: ${error.message}`)
+		core.warning(`Failed to delete ${packageName}@${version}: ${(error as Error).message}`)
 	}
 }
 
 /**
  * Check if all branches referenced by a version's tags are deleted
- * @param {Array<string>} tags
- * @param {Set<string>} existingBranches
- * @returns {boolean}
  */
-function areAllBranchesDeleted(tags, existingBranches) {
+function areAllBranchesDeleted(tags: string[], existingBranches: Set<string>): boolean {
 	const branchTags = tags.filter((tag) => tag.startsWith('branch-'))
 
 	if (branchTags.length === 0) {
@@ -153,14 +169,15 @@ function areAllBranchesDeleted(tags, existingBranches) {
 
 /**
  * Cleanup old preview versions
- * @param {Array<{name: string}>} versions
- * @param {{owner: string, repo: string}} repository
- * @param {number} maxVersions
- * @param {number} minAgeDays
- * @param {string} registry
- * @param {string} token
  */
-export async function cleanupOldVersions(versions, repository, maxVersions, minAgeDays, registry, token) {
+export async function cleanupOldVersions(
+	versions: VersionInfo[],
+	repository: Repository,
+	maxVersions: number,
+	minAgeDays: number,
+	registry: string,
+	token: string
+): Promise<void> {
 	core.info(`Max versions: ${maxVersions}, Min age: ${minAgeDays} days`)
 
 	const existingBranches = await getAllBranches(repository, token)
@@ -181,10 +198,10 @@ export async function cleanupOldVersions(versions, repository, maxVersions, minA
 		}
 
 		// Find deletion candidates
-		const candidates = []
+		const candidates: DeletionCandidate[] = []
 
 		for (const v of previewVersions) {
-			const ageMs = now - v.publishedAt
+			const ageMs = now.getTime() - v.publishedAt.getTime()
 
 			// Skip versions younger than minimum age
 			if (ageMs < minAgeMs) {

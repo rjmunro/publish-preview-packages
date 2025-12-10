@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "GitHub Action to publish branch preview packages with content-based versioning",
   "main": "dist/index.js",
+  "types": "lib/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt",
-    "test": "node --test src/**/*.test.js",
+    "build:types": "tsc",
+    "build": "yarn build:types && ncc build lib/index.js -o dist --source-map --license licenses.txt",
+    "test": "node --test src/**/*.test.ts",
     "lint": "eslint src",
     "prepare": "yarn build"
   },
@@ -27,7 +29,9 @@
     "@actions/github": "^6.0.0"
   },
   "devDependencies": {
+    "@types/node": "^24.10.2",
     "@vercel/ncc": "^0.38.3",
-    "eslint": "^9.16.0"
+    "eslint": "^9.16.0",
+    "typescript": "^5.9.3"
   }
 }

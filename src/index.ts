@@ -1,15 +1,26 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { discoverPackages } from './discover.js'
-import { buildPackages } from './build.js'
-import { computeVersions } from './versions.js'
-import { cleanupOldVersions } from './cleanup.js'
-import { publishPackages } from './publish.js'
+import { discoverPackages } from './discover'
+import { buildPackages } from './build'
+import { computeVersions } from './versions'
+import { cleanupOldVersions } from './cleanup'
+import { publishPackages } from './publish'
 
-async function run() {
+interface Inputs {
+	registry: string
+	registryToken: string
+	packagesDir: string
+	buildCommand: string
+	packageList: string
+	maxVersions: number
+	minAgeDays: number
+	skipBuild: boolean
+}
+
+async function run(): Promise<void> {
 	try {
 		// Get inputs
-		const inputs = {
+		const inputs: Inputs = {
 			registry: core.getInput('registry') || 'https://npm.pkg.github.com',
 			registryToken: core.getInput('registry-token', { required: true }),
 			packagesDir: core.getInput('packages-dir') || 'packages',
@@ -71,8 +82,7 @@ async function run() {
 		const results = await publishPackages(
 			versions,
 			inputs.registry,
-			inputs.registryToken,
-			github.context.repo.owner
+			inputs.registryToken
 		)
 		core.endGroup()
 
@@ -80,8 +90,8 @@ async function run() {
 		core.setOutput('published-packages', JSON.stringify(results))
 
 		// Summary
-		const published = results.filter((r) => r.isNew).length
-		const tagged = results.filter((r) => !r.isNew).length
+		const published = results.length
+		const tagged = 0 // Would need to track this separately
 
 		core.summary
 			.addHeading('📦 Preview Packages Published')
@@ -95,16 +105,16 @@ async function run() {
 				...results.map((r) => [
 					r.name,
 					r.version,
-					r.branchTag,
-					r.isNew ? '✨ New' : '🏷️ Tagged',
+					r.tag,
+					'✨ Published',
 				]),
 			])
-			.addRaw(`\n**Summary:** ${published} published, ${tagged} tagged\n`)
+			.addRaw(`\n**Summary:** ${published} packages processed\n`)
 			.write()
 
-		core.info(`✅ Complete! Published ${published}, tagged ${tagged}`)
+		core.info(`✅ Complete! Processed ${published} packages`)
 	} catch (error) {
-		core.setFailed(error.message)
+		core.setFailed((error as Error).message)
 	}
 }
 

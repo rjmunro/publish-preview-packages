@@ -1,17 +1,26 @@
 import { createHash } from 'crypto'
 import { readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
+import type { PackageInfo } from './discover'
+
+export interface VersionInfo {
+	name: string
+	path: string
+	currentVersion: string
+	previewVersion: string
+	contentHash: string
+	branchTag: string
+	distPath: string
+}
 
 /**
  * Compute content hash for a directory
- * @param {string} dirPath - Directory to hash
- * @returns {Promise<string>} - SHA256 hash (first 12 chars)
  */
-async function hashDirectory(dirPath) {
+async function hashDirectory(dirPath: string): Promise<string> {
 	const hash = createHash('sha256')
-	const files = []
+	const files: string[] = []
 
-	async function walkDir(dir) {
+	async function walkDir(dir: string): Promise<void> {
 		const entries = await readdir(dir, { withFileTypes: true })
 		for (const entry of entries) {
 			const fullPath = join(dir, entry.name)
@@ -42,21 +51,19 @@ async function hashDirectory(dirPath) {
 
 /**
  * Sanitize branch name for use in dist-tag
- * @param {string} branch - Branch name
- * @returns {string} - Sanitized branch name
  */
-function sanitizeBranchName(branch) {
+function sanitizeBranchName(branch: string): string {
 	return branch.replace(/[^a-zA-Z0-9_-]/g, '-')
 }
 
 /**
  * Compute preview versions for packages
- * @param {Array<{name: string, path: string, version: string}>} packages
- * @param {string} branchName
- * @returns {Promise<Array<{name: string, path: string, currentVersion: string, previewVersion: string, contentHash: string, branchTag: string, distPath: string}>>}
  */
-export async function computeVersions(packages, branchName) {
-	const results = []
+export async function computeVersions(
+	packages: PackageInfo[],
+	branchName: string
+): Promise<VersionInfo[]> {
+	const results: VersionInfo[] = []
 	const sanitizedBranch = sanitizeBranchName(branchName)
 
 	for (const pkg of packages) {
