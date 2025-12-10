@@ -27,37 +27,12 @@ jobs:
       - name: Build action
         run: yarn build
 
-      - name: Create test packages
-        run: |
-          mkdir -p test-workspace/packages/test-package-a/dist
-          mkdir -p test-workspace/packages/test-package-b/dist
-
-          # Create package A
-          cat > test-workspace/packages/test-package-a/package.json << 'EOF'
-          {
-            "name": "@rjmunro/test-package-a",
-            "version": "1.0.0",
-            "main": "dist/index.js"
-          }
-          EOF
-          echo "export const greeting = 'Hello from A';" > test-workspace/packages/test-package-a/dist/index.js
-
-          # Create package B
-          cat > test-workspace/packages/test-package-b/package.json << 'EOF'
-          {
-            "name": "@rjmunro/test-package-b",
-            "version": "2.0.0",
-            "main": "dist/index.js"
-          }
-          EOF
-          echo "export const greeting = 'Hello from B';" > test-workspace/packages/test-package-b/dist/index.js
-
-      - name: Test the action
+      - name: Test the action by publishing itself
         uses: ./
         id: publish
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
-          packages-dir: test-workspace/packages
+          packages: '.'
           skip-build: 'true'
           max-versions: '10'
           min-age-days: '1'
@@ -67,14 +42,21 @@ jobs:
           echo "Published packages:"
           echo '${{ steps.publish.outputs.published-packages }}' | jq .
 
-      - name: Verify packages were published
+      - name: Verify package was published
         run: |
           PACKAGES='${{ steps.publish.outputs.published-packages }}'
           COUNT=$(echo "$PACKAGES" | jq 'length')
 
-          if [ "$COUNT" -ne 2 ]; then
-            echo "Expected 2 packages, got $COUNT"
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected 1 package, got $COUNT"
             exit 1
           fi
 
-          echo "✓ Successfully published $COUNT packages"
+          PACKAGE_NAME=$(echo "$PACKAGES" | jq -r '.[0].name')
+          EXPECTED="@${{ github.repository_owner }}/publish-preview-packages"
+          if [ "$PACKAGE_NAME" != "$EXPECTED" ]; then
+            echo "Expected package name '$EXPECTED', got '$PACKAGE_NAME'"
+            exit 1
+          fi
+
+          echo "✓ Successfully published package: $PACKAGE_NAME"
