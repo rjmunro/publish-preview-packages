@@ -1,0 +1,33 @@
+{
+  "name": "publish-preview-packages",
+  "version": "1.0.0",
+  "description": "GitHub Action to publish branch preview packages with content-based versioning",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt",
+    "test": "node --test src/**/*.test.js",
+    "lint": "eslint src",
+    "prepare": "yarn build"
+  },
+  "keywords": [
+    "github-action",
+    "npm",
+    "publish",
+    "preview",
+    "monorepo",
+    "yarn",
+    "lerna"
+  ],
+  "author": "rjmunro",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^9.16.0"
+  }
+}

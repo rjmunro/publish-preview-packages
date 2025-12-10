@@ -1,0 +1,56 @@
+name: 'Publish Preview Packages'
+description: 'Publish branch preview packages to GitHub Packages with content-based versioning and automatic cleanup'
+author: 'rjmunro'
+
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  registry:
+    description: 'npm registry URL (default: GitHub Packages)'
+    required: false
+    default: 'https://npm.pkg.github.com'
+  
+  registry-token:
+    description: 'Authentication token for npm registry'
+    required: true
+  
+  packages-dir:
+    description: 'Directory containing packages (default: packages)'
+    required: false
+    default: 'packages'
+  
+  build-command:
+    description: 'Command to build packages (default: yarn build)'
+    required: false
+    default: 'yarn build'
+  
+  package-list:
+    description: 'Comma-separated list of package names to publish (default: auto-detect from lerna.json or workspace)'
+    required: false
+    default: ''
+  
+  max-versions:
+    description: 'Maximum preview versions to keep per package'
+    required: false
+    default: '150'
+  
+  min-age-days:
+    description: 'Minimum age in days before a version can be deleted'
+    required: false
+    default: '30'
+  
+  skip-build:
+    description: 'Skip the build step (assumes packages are already built)'
+    required: false
+    default: 'false'
+
+outputs:
+  published-packages:
+    description: 'JSON array of published package info with names, versions, and tags'
+    value: ${{ steps.publish.outputs.packages }}
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
