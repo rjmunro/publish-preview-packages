@@ -78,7 +78,7 @@ jobs:
         with:
           script: |
             const packages = JSON.parse('${{ steps.publish.outputs.published-packages }}');
-            
+
             // Find PR for this branch if push event
             let prNumber = context.payload.pull_request?.number;
             if (!prNumber && context.eventName === 'push') {
@@ -90,7 +90,7 @@ jobs:
               });
               prNumber = prs[0]?.number;
             }
-            
+
             if (!prNumber) {
               console.log('No PR found, skipping comment');
               return;
@@ -118,9 +118,34 @@ jobs:
 
             *Preview packages are automatically published for every branch. They will be cleaned up when branches are deleted.*`;
 
-            await github.rest.issues.createComment({
-              issue_number: prNumber,
+            // Find existing comment from this bot
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
+              issue_number: prNumber
             });
+
+            const botComment = comments.find(comment =>
+              comment.user?.type === 'Bot' &&
+              comment.body?.includes('📦 Preview Packages Published')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+              console.log('Updated existing PR comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body
+              });
+              console.log('Created new PR comment');
+            }
