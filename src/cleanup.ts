@@ -71,6 +71,11 @@ async function getPreviewVersions(
 			}
 		)
 
+		// If npm view fails, output might be empty
+		if (!output.trim()) {
+			return []
+		}
+
 		const data = JSON.parse(output) as {
 			versions?: string | string[]
 			time?: Record<string, string>
