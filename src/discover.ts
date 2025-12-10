@@ -3,7 +3,7 @@
  * Licensed under the MIT license, see LICENSE file for details
  */
 
-import { readdir, readFile, stat } from 'fs/promises'
+import { readdir, readFile, stat, writeFile } from 'fs/promises'
 import { join } from 'path'
 
 export interface PackageInfo {
@@ -13,11 +13,45 @@ export interface PackageInfo {
 }
 
 /**
+ * Replace or add scope to package name
+ */
+function applyScopeToPackage(packageName: string, scope: string): string {
+	// Remove existing scope if present
+	const nameWithoutScope = packageName.startsWith('@')
+		? packageName.split('/')[1] || packageName
+		: packageName
+
+	return `@${scope}/${nameWithoutScope}`
+}
+
+/**
+ * Update package.json to use repository owner's scope
+ */
+async function ensurePackageScope(pkgPath: string, scope: string): Promise<{ name: string; version: string }> {
+	const pkgJsonPath = join(pkgPath, 'package.json')
+	const pkgJson = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
+
+	const originalName = pkgJson.name
+	const scopedName = applyScopeToPackage(originalName, scope)
+
+	if (originalName !== scopedName) {
+		pkgJson.name = scopedName
+		await writeFile(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8')
+	}
+
+	return {
+		name: pkgJson.name,
+		version: pkgJson.version,
+	}
+}
+
+/**
  * Discover packages to publish
  */
 export async function discoverPackages(
 	packagesDir: string,
-	packageList: string
+	packageList: string,
+	repositoryOwner: string
 ): Promise<PackageInfo[]> {
 	const packages: PackageInfo[] = []
 
@@ -26,14 +60,13 @@ export async function discoverPackages(
 		const names = packageList.split(',').map((s) => s.trim())
 		for (const name of names) {
 			const pkgPath = join(packagesDir, name)
-			const pkgJsonPath = join(pkgPath, 'package.json')
 
 			try {
-				const pkgJson = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
+				const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner)
 				packages.push({
-					name: pkgJson.name,
+					name: pkgInfo.name,
 					path: pkgPath,
-					version: pkgJson.version,
+					version: pkgInfo.version,
 				})
 			} catch (error) {
 				throw new Error(`Failed to read package.json for ${name}: ${(error as Error).message}`)
@@ -61,10 +94,11 @@ export async function discoverPackages(
 				// Skip private packages
 				if (pkgJson.private) continue
 
+				const pkgInfo = await ensurePackageScope(pkgPath, repositoryOwner)
 				packages.push({
-					name: pkgJson.name,
+					name: pkgInfo.name,
 					path: pkgPath,
-					version: pkgJson.version,
+					version: pkgInfo.version,
 				})
 			} catch {
 				// Skip directories without package.json

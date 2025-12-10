@@ -45,7 +45,7 @@ async function run(): Promise<void> {
 
 		// Step 1: Discover packages
 		core.startGroup('🔍 Discovering packages')
-		const packages = await discoverPackages(inputs.packagesDir, inputs.packageList)
+		const packages = await discoverPackages(inputs.packagesDir, inputs.packageList, repository.owner)
 		core.info(`Found ${packages.length} packages to process`)
 		for (const pkg of packages) {
 			core.info(`  - ${pkg.name} (${pkg.path})`)
