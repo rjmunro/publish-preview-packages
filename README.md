@@ -179,7 +179,7 @@ Output format:
 
 ### Posting Results to PR Comments
 
-You can use the output to comment on pull requests:
+You can use the output to comment on pull requests. **Important**: Update existing comments instead of creating new ones to avoid clutter.
 
 ```yaml
 - uses: rjmunro/publish-preview-packages@v1
@@ -188,11 +188,28 @@ You can use the output to comment on pull requests:
     registry-token: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Comment on PR
-  if: github.event_name == 'pull_request'
+  if: github.event_name == 'pull_request' || github.event_name == 'push'
   uses: actions/github-script@v7
   with:
     script: |
       const packages = JSON.parse('${{ steps.publish.outputs.published-packages }}');
+      
+      // Find PR for this branch if push event
+      let prNumber = context.payload.pull_request?.number;
+      if (!prNumber && context.eventName === 'push') {
+        const { data: prs } = await github.rest.pulls.list({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          state: 'open',
+          head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`
+        });
+        prNumber = prs[0]?.number;
+      }
+      
+      if (!prNumber) {
+        console.log('No PR found, skipping comment');
+        return;
+      }
       
       const body = `## 📦 Preview Packages Published
 
@@ -216,12 +233,35 @@ ${packages.map(pkg =>
 
 *Preview packages are automatically published for every branch.*`;
 
-      github.rest.issues.createComment({
-        issue_number: context.issue.number,
+      // Find existing bot comment
+      const { data: comments } = await github.rest.issues.listComments({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        body: body
+        issue_number: prNumber
       });
+      
+      const botComment = comments.find(comment => 
+        comment.user?.type === 'Bot' && 
+        comment.body?.includes('📦 Preview Packages Published')
+      );
+      
+      if (botComment) {
+        // Update existing comment
+        await github.rest.issues.updateComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          comment_id: botComment.id,
+          body: body
+        });
+      } else {
+        // Create new comment
+        await github.rest.issues.createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: prNumber,
+          body: body
+        });
+      }
 ```
 
 This will post a comment like:
