@@ -5,8 +5,8 @@
 
 import * as core from '@actions/core'
 import * as exec from '@actions/exec'
-import * as path from 'path'
-import { readFile, writeFile } from 'fs/promises'
+import * as path from 'node:path'
+import { readFile, writeFile } from 'node:fs/promises'
 import type { VersionInfo } from './versions'
 
 export interface PublishedPackage {

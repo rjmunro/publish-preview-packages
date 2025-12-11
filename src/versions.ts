@@ -3,9 +3,9 @@
  * Licensed under the MIT license, see LICENSE file for details
  */
 
-import { createHash } from 'crypto'
-import { readdir, readFile, stat } from 'fs/promises'
-import { join } from 'path'
+import { createHash } from 'node:crypto'
+import { readdir, readFile, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { PackageInfo } from './discover'
 
 export interface VersionInfo {

@@ -3,8 +3,8 @@
  * Licensed under the MIT license, see LICENSE file for details
  */
 
-import { readdir, readFile, stat, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export interface PackageInfo {
 	name: string
