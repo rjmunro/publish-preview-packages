@@ -171,15 +171,32 @@ Output format:
 [
   {
     "name": "@org/shared-lib",
+    "originalName": "shared-lib",
     "version": "1.0.0-preview.abc123",
-    "tag": "branch-feature-name"
+    "tag": "branch-feature-name",
+    "isNew": true
+  },
+  {
+    "name": "@org/corelib",
+    "originalName": "corelib",
+    "version": "1.0.0-preview.xyz789",
+    "tag": "branch-feature-name",
+    "isNew": false
   }
 ]
 ```
 
+Fields:
+
+- `name` - Scoped package name (e.g., `@owner/package`)
+- `originalName` - Original package name before scope was applied (e.g., `package`)
+- `version` - Preview version number (e.g., `1.0.0-preview.abc123`)
+- `tag` - Branch dist-tag (e.g., `branch-feature-name`)
+- `isNew` - `true` if this version was newly published in this run, `false` if it already existed
+
 ### Posting Results to PR Comments
 
-You can use the output to comment on pull requests:
+You can use the output to comment on pull requests. **Important**: Update existing comments instead of creating new ones to avoid clutter.
 
 ```yaml
 - uses: rjmunro/publish-preview-packages@v1
@@ -188,63 +205,143 @@ You can use the output to comment on pull requests:
     registry-token: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Comment on PR
-  if: github.event_name == 'pull_request'
+  if: github.event_name == 'pull_request' || github.event_name == 'push'
   uses: actions/github-script@v7
   with:
     script: |
       const packages = JSON.parse('${{ steps.publish.outputs.published-packages }}');
       
-      const body = `## 📦 Preview Packages Published
+      // Find PR for this branch if push event
+      let prNumber = context.payload.pull_request?.number;
+      if (!prNumber && context.eventName === 'push') {
+        const { data: prs } = await github.rest.pulls.list({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          state: 'open',
+          head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`
+        });
+        prNumber = prs[0]?.number;
+      }
+      
+      if (!prNumber) {
+        console.log('No PR found, skipping comment');
+        return;
+      }
+      
+      // Split packages into updated (new) and unchanged (existing)
+      const updatedPackages = packages.filter(pkg => pkg.isNew);
+      const unchangedPackages = packages.filter(pkg => !pkg.isNew);
+      
+      const formatPackage = (pkg) => `- **${pkg.name}**@\`${pkg.version}\`
+        \`\`\`bash
+        # Install this preview version
+        yarn add ${pkg.name}@${pkg.tag}
+        \`\`\`
+        
+        To use via resolutions:
+        \`\`\`json
+        "resolutions": {
+          "${pkg.originalName}": "${pkg.name}@${pkg.version}"
+        }
+        \`\`\``;
+      
+      let body = `## 📦 Preview Packages Published\n\n`;
+      
+      if (updatedPackages.length > 0) {
+        body += `### ✨ Updated in this branch\n\n${updatedPackages.map(formatPackage).join('\n\n')}\n\n`;
+      }
+      
+      if (unchangedPackages.length > 0) {
+        body += `### 📌 Unchanged (available from previous commits)\n\n`;
+        body += unchangedPackages.map(pkg => `- **${pkg.name}**@\`${pkg.version}\` - install with \`yarn add ${pkg.name}@${pkg.tag}\``).join('\n');
+        body += '\n\n';
+      }
+      
+      body += `\`\`\`bash
+      # Configure npm to use GitHub Packages (add to .npmrc)
+      echo "@your-org:registry=https://npm.pkg.github.com" >> .npmrc
+      \`\`\`
+      
+      *Preview packages are automatically published for every branch.*`;
 
-${packages.map(pkg => 
-  `- **${pkg.name}**@\`${pkg.version}\`
-  \`\`\`bash
-  # Configure npm to use GitHub Packages
-  echo "@your-org:registry=https://npm.pkg.github.com" >> .npmrc
-  
-  # Install this preview version
-  yarn add ${pkg.name}@${pkg.tag}
-  \`\`\`
-  
-  To use this preview via resolutions:
-  \`\`\`json
-  "resolutions": {
-    "${pkg.originalName}": "${pkg.name}@${pkg.version}"
-  }
-  \`\`\``
-).join('\n\n')}
-
-*Preview packages are automatically published for every branch.*`;
-
-      github.rest.issues.createComment({
-        issue_number: context.issue.number,
+      // Find existing bot comment
+      const { data: comments } = await github.rest.issues.listComments({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        body: body
+        issue_number: prNumber
       });
+      
+      const botComment = comments.find(comment => 
+        comment.user?.type === 'Bot' && 
+        comment.body?.includes('📦 Preview Packages Published')
+      );
+      
+      if (botComment) {
+        // Update existing comment
+        await github.rest.issues.updateComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          comment_id: botComment.id,
+          body: body
+        });
+      } else {
+        // Create new comment
+        await github.rest.issues.createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: prNumber,
+          body: body
+        });
+      }
 ```
 
 This will post a comment like:
 
 > ## 📦 Preview Packages Published
 >
+> ### ✨ Updated in this branch
+>
 > - **@org/shared-lib**@`1.0.0-preview.abc123`
+>
 >   ```bash
->   # Configure npm to use GitHub Packages
->   echo "@org:registry=https://npm.pkg.github.com" >> .npmrc
->   
 >   # Install this preview version
 >   yarn add @org/shared-lib@branch-feature-name
 >   ```
->   
->   To use this preview via resolutions:
+>
+>   To use via resolutions:
+>
 >   ```json
 >   "resolutions": {
 >     "shared-lib": "@org/shared-lib@1.0.0-preview.abc123"
 >   }
 >   ```
 >
-> *Preview packages are available on GitHub Packages. Configure your `.npmrc` to use them.*
+> - **@org/blueprints-integration**@`2.1.0-preview.def456`
+>
+>   ```bash
+>   # Install this preview version
+>   yarn add @org/blueprints-integration@branch-feature-name
+>   ```
+>
+>   To use via resolutions:
+>
+>   ```json
+>   "resolutions": {
+>     "blueprints-integration": "@org/blueprints-integration@2.1.0-preview.def456"
+>   }
+>   ```
+>
+> ### 📌 Unchanged (available from previous commits)
+>
+> - **@org/corelib**@`1.0.0-preview.xyz789` - install with `yarn add @org/corelib@branch-feature-name`
+> - **@org/job-worker**@`1.0.0-preview.xyz789` - install with `yarn add @org/job-worker@branch-feature-name`
+>
+> ```bash
+> # Configure npm to use GitHub Packages (add to .npmrc)
+> echo "@org:registry=https://npm.pkg.github.com" >> .npmrc
+> ```
+>
+> *Preview packages are automatically published for every branch.*
 
 ## Requirements
 

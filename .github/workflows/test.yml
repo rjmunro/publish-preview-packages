@@ -1,0 +1,151 @@
+name: Test Action
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Build action
+        run: yarn build
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code dist/; then
+            echo "❌ Error: dist/ has uncommitted changes after build"
+            echo "Please run 'yarn build' and commit the changes"
+            git diff dist/
+            exit 1
+          fi
+          echo "✓ dist/ is up to date"
+
+      - name: Test the action by publishing itself
+        uses: ./
+        id: publish
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          packages: '.'
+          skip-build: 'true'
+          max-versions: '10'
+          min-age-days: '1'
+
+      - name: Display results
+        run: |
+          echo "Published packages:"
+          echo '${{ steps.publish.outputs.published-packages }}' | jq .
+
+      - name: Verify package was published
+        run: |
+          PACKAGES='${{ steps.publish.outputs.published-packages }}'
+          COUNT=$(echo "$PACKAGES" | jq 'length')
+
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected 1 package, got $COUNT"
+            exit 1
+          fi
+
+          PACKAGE_NAME=$(echo "$PACKAGES" | jq -r '.[0].name')
+          EXPECTED="@${{ github.repository_owner }}/publish-preview-packages"
+          if [ "$PACKAGE_NAME" != "$EXPECTED" ]; then
+            echo "Expected package name '$EXPECTED', got '$PACKAGE_NAME'"
+            exit 1
+          fi
+
+          echo "✓ Successfully published package: $PACKAGE_NAME"
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const packages = JSON.parse('${{ steps.publish.outputs.published-packages }}');
+
+            // Find PR for this branch if push event
+            let prNumber = context.payload.pull_request?.number;
+            if (!prNumber && context.eventName === 'push') {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`
+              });
+              prNumber = prs[0]?.number;
+            }
+
+            if (!prNumber) {
+              console.log('No PR found, skipping comment');
+              return;
+            }
+
+            const body = `## 📦 Preview Packages Published
+
+            ${packages.map(pkg => `- **${pkg.name}**@\`${pkg.version}\`
+              \`\`\`bash
+              # Configure npm to use GitHub Packages
+              echo "@${{ github.repository_owner }}:registry=https://npm.pkg.github.com" >> .npmrc
+
+              # Install this preview version
+              yarn add ${pkg.name}@${pkg.tag}
+              # or
+              yarn add ${pkg.name}@${pkg.version}
+              \`\`\`
+
+              To use this preview in your project via resolutions:
+              \`\`\`json
+              "resolutions": {
+                "${pkg.originalName}": "${pkg.name}@${pkg.version}"
+              }
+              \`\`\``).join('\n\n')}
+
+            *Preview packages are automatically published for every branch. They will be cleaned up when branches are deleted.*`;
+
+            // Find existing comment from this bot
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user?.type === 'Bot' &&
+              comment.body?.includes('📦 Preview Packages Published')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+              console.log('Updated existing PR comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body
+              });
+              console.log('Created new PR comment');
+            }

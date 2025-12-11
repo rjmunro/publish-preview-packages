@@ -14,6 +14,7 @@ export interface PublishedPackage {
 	originalName: string
 	version: string
 	tag: string
+	isNew: boolean // true if version was newly published, false if it already existed
 }
 
 /**
@@ -110,20 +111,20 @@ async function publishPackage(
 		await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8')
 	} catch (error) {
 		const err = error as Error
-		
+
 		// Check if this is a "version already exists" error (409 Conflict)
 		if (err.message?.includes('409') || err.message?.includes('E409') || err.message?.includes('Cannot publish over existing version')) {
 			core.info(`  ℹ️  Version ${version} already published, adding tag only`)
-			
+
 			// Restore original version first
 			packageJson.version = originalVersion
 			await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8')
-			
+
 			// Add the dist-tag to the existing version
 			await addDistTag(packageName, version, tag, registry, token)
 			return
 		}
-		
+
 		// Try to restore original version on error
 		try {
 			const originalJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
@@ -154,17 +155,26 @@ export async function publishPackages(
 		if (exists) {
 			core.info(`  ℹ️  Version ${pkg.previewVersion} already exists`)
 			await addDistTag(pkg.name, pkg.previewVersion, pkg.branchTag, registry, token)
+
+			published.push({
+				name: pkg.name,
+				originalName: pkg.originalName,
+				version: pkg.previewVersion,
+				tag: pkg.branchTag,
+				isNew: false,
+			})
 		} else {
 			core.info(`  📦 Publishing new version ${pkg.previewVersion}`)
 			await publishPackage(pkg.path, pkg.previewVersion, pkg.branchTag, registry, token)
-		}
 
-		published.push({
-			name: pkg.name,
-			originalName: pkg.originalName,
-			version: pkg.previewVersion,
-			tag: pkg.branchTag,
-		})
+			published.push({
+				name: pkg.name,
+				originalName: pkg.originalName,
+				version: pkg.previewVersion,
+				tag: pkg.branchTag,
+				isNew: true,
+			})
+		}
 	}
 
 	return published
