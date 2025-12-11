@@ -14,6 +14,7 @@ export interface PublishedPackage {
 	originalName: string
 	version: string
 	tag: string
+	isNew: boolean // true if version was newly published, false if it already existed
 }
 
 /**
@@ -154,17 +155,26 @@ export async function publishPackages(
 		if (exists) {
 			core.info(`  ℹ️  Version ${pkg.previewVersion} already exists`)
 			await addDistTag(pkg.name, pkg.previewVersion, pkg.branchTag, registry, token)
+
+			published.push({
+				name: pkg.name,
+				originalName: pkg.originalName,
+				version: pkg.previewVersion,
+				tag: pkg.branchTag,
+				isNew: false,
+			})
 		} else {
 			core.info(`  📦 Publishing new version ${pkg.previewVersion}`)
 			await publishPackage(pkg.path, pkg.previewVersion, pkg.branchTag, registry, token)
-		}
 
-		published.push({
-			name: pkg.name,
-			originalName: pkg.originalName,
-			version: pkg.previewVersion,
-			tag: pkg.branchTag,
-		})
+			published.push({
+				name: pkg.name,
+				originalName: pkg.originalName,
+				version: pkg.previewVersion,
+				tag: pkg.branchTag,
+				isNew: true,
+			})
+		}
 	}
 
 	return published

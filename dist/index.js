@@ -696,17 +696,25 @@ async function publishPackages(versions, registry, token) {
         if (exists) {
             core.info(`  ℹ️  Version ${pkg.previewVersion} already exists`);
             await addDistTag(pkg.name, pkg.previewVersion, pkg.branchTag, registry, token);
+            published.push({
+                name: pkg.name,
+                originalName: pkg.originalName,
+                version: pkg.previewVersion,
+                tag: pkg.branchTag,
+                isNew: false,
+            });
         }
         else {
             core.info(`  📦 Publishing new version ${pkg.previewVersion}`);
             await publishPackage(pkg.path, pkg.previewVersion, pkg.branchTag, registry, token);
+            published.push({
+                name: pkg.name,
+                originalName: pkg.originalName,
+                version: pkg.previewVersion,
+                tag: pkg.branchTag,
+                isNew: true,
+            });
         }
-        published.push({
-            name: pkg.name,
-            originalName: pkg.originalName,
-            version: pkg.previewVersion,
-            tag: pkg.branchTag,
-        });
     }
     return published;
 }
